@@ -13,12 +13,12 @@ Please also make sure Docker is running. Type `systemctl status docker` to check
 the running status of Docker daemon, and type `systemctl start docker` to start
 Docker if needed.
 
-## Download Apollo Source
+## Download Apollo Sources
 
 Run the following commands to clone
 [Apollo's GitHub Repo](https://github.com/ApolloAuto/apollo.git).
 
-```
+```bash
 # Using SSH
 git clone git@github.com:ApolloAuto/apollo.git
 
@@ -29,15 +29,19 @@ git clone https://github.com/ApolloAuto/apollo.git
 
 And checkout the latest branch:
 
-```
+```bash
 cd apollo
 git checkout master
 ```
 
+For CN users, please refer to
+[How to Clone Apollo Repository from China](../howto/how_to_clone_apollo_repo_from_china.md)
+if your have difficulty cloning from GitHub.
+
 (Optional) For convenience, you can set up environment variable
 `APOLLO_ROOT_DIR` to refer to Apollo root directory by running:
 
-```
+```bash
 echo "export APOLLO_ROOT_DIR=$(pwd)" >> ~/.bashrc  && source ~/.bashrc
 ```
 
@@ -48,7 +52,7 @@ root directory as `$APOLLO_ROOT_DIR`
 
 From the `${APOLLO_ROOT_DIR}` directory, type
 
-```
+```bash
 bash docker/scripts/dev_start.sh
 ```
 
@@ -56,7 +60,7 @@ to start Apollo development Docker container.
 
 If successful, you will see the following messages at the bottom of your screen:
 
-```
+```bash
 [ OK ] Congratulations! You have successfully finished setting up Apollo Dev Environment.
 [ OK ] To login into the newly created apollo_dev_michael container, please run the following command:
 [ OK ]   bash docker/scripts/dev_into.sh
@@ -67,7 +71,7 @@ If successful, you will see the following messages at the bottom of your screen:
 
 Run the following command to login into the newly started container:
 
-```
+```bash
 bash docker/scripts/dev_into.sh
 ```
 
@@ -75,7 +79,7 @@ bash docker/scripts/dev_into.sh
 
 From the `/apollo` directory inside Apollo Docker container, type:
 
-```
+```bash
 ./apollo.sh build
 ```
 
@@ -83,11 +87,15 @@ to build the whole Apollo project.
 
 Or type
 
-```
+```bash
 ./apollo.sh build_opt
 ```
 
 for an optimized build.
+
+You can refer to
+[Apollo Build and Test Explained](../specs/apollo_build_and_test_explained.md)
+for a thorough understanding of Apollo builds and tests.
 
 ## Launch and Run Apollo
 
@@ -95,7 +103,7 @@ Please refer to the
 [Run Apollo](../howto/how_to_launch_and_run_apollo.md#run-apollo) section of
 [How to Launch And Run Apollo](../howto/how_to_launch_and_run_apollo.md).
 
-## Support a new Vehicle in DreamView
+## (Optional) Support a new Vehicle in DreamView
 
 In order to support a new vehicle in DreamView, please follow the steps below:
 

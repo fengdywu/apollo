@@ -26,18 +26,25 @@ DOCKER_REPO="apolloauto/apollo"
 APOLLO_DEV="apollo_dev_${USER}"
 DEV_INSIDE="in-dev-docker"
 
-SUPPORTED_ARCHS=" x86_64 aarch64 "
+SUPPORTED_ARCHS=(x86_64 aarch64)
 HOST_ARCH="$(uname -m)"
+HOST_OS="$(uname -s)"
 TARGET_ARCH="$(uname -m)"
 
-VERSION_X86_64="dev-x86_64-18.04-20200908_0211"
-VERSION_AARCH64="dev-aarch64-18.04-20200829_1811"
+VERSION_X86_64="dev-x86_64-18.04-20201210_1400"
+TESTING_VERSION_X86_64="dev-x86_64-18.04-testing-20201209_2340"
+
+VERSION_AARCH64="dev-aarch64-18.04-20201218_0030"
 USER_VERSION_OPT=
 
 DOCKER_RUN="docker run"
 FAST_MODE="no"
-GEOLOC="none"
-USE_LOCAL_IMAGE="no"
+
+GEOLOC=
+GEO_REGISTRY=
+
+USE_LOCAL_IMAGE=0
+CUSTOM_DIST=
 USE_GPU_HOST=0
 USER_AGREED="no"
 
@@ -48,15 +55,15 @@ MAP_VOLUMES_CONF=
 OTHER_VOLUMES_CONF=
 
 DEFAULT_MAPS=(
-  sunnyvale_big_loop
-  sunnyvale_loop
-  sunnyvale_with_two_offices
-  san_mateo
+    sunnyvale_big_loop
+    sunnyvale_loop
+    sunnyvale_with_two_offices
+    san_mateo
 )
 
 DEFAULT_TEST_MAPS=(
-  sunnyvale_big_loop
-  sunnyvale_loop
+    sunnyvale_big_loop
+    sunnyvale_loop
 )
 
 # Check whether user has agreed license agreement
@@ -73,7 +80,7 @@ function check_agreement() {
 
     if [ "$USER_AGREED" = "yes" ]; then
         local progname="$(basename $0)"
-        cat "${AGREEMENT_FILE}" > "${agreement_record}"
+        cat "${AGREEMENT_FILE}" >"${agreement_record}"
         local msgtext="By specifying '-y' option when running ${progname}, \
 you have agreed to the license agreement above."
         echo "${msgtext}" | tee -a "${agreement_record}"
@@ -86,9 +93,9 @@ you have agreed to the license agreement above."
         echo
 
         if [[ "${user_agreed}" = "y" || "${user_agreed}" == "Y" ]]; then
-            cat "${AGREEMENT_FILE}" > "${agreement_record}"
-            echo "${tip}" >> "${agreement_record}"
-            echo "${user_agreed}" >> $agreement_record
+            cat "${AGREEMENT_FILE}" >"${agreement_record}"
+            echo "${tip}" >>"${agreement_record}"
+            echo "${user_agreed}" >>$agreement_record
         else
             exit 1
         fi
@@ -106,14 +113,15 @@ function _optarg_check_for_opt() {
 }
 
 function show_usage() {
-cat <<EOF
+    cat <<EOF
 Usage: $0 [options] ...
 OPTIONS:
     -h, --help             Display this help and exit.
     -f, --fast             Fast mode without pulling all map volumes.
     -g, --geo <us|cn|none> Pull docker image from geolocation specific registry mirror.
     -l, --local            Use local docker image.
-    -t, --tag <version>    Specify which version of a docker image to pull.
+    -t, --tag <TAG>        Specify docker image with tag <TAG> to start.
+    -d, --dist             Specify Apollo distribution(stable/testing)
     --shm-size <bytes>     Size of /dev/shm . Passed directly to "docker run"
     -y                     Agree to Apollo License Agreement non-interactively.
     stop                   Stop all running Apollo containers.
@@ -124,8 +132,8 @@ function stop_all_apollo_containers_for_user() {
     local force="$1"
     local running_containers
     running_containers="$(docker ps -a --format '{{.Names}}')"
-    for container in ${running_containers[*]} ; do
-        if [[ "${container}" =~ apollo_.*_${USER} ]] ; then
+    for container in ${running_containers[*]}; do
+        if [[ "${container}" =~ apollo_.*_${USER} ]]; then
             #printf %-*s 70 "Now stop container: ${container} ..."
             #printf "\033[32m[DONE]\033[0m\n"
             #printf "\033[31m[FAILED]\033[0m\n"
@@ -147,110 +155,104 @@ function stop_all_apollo_containers_for_user() {
     fi
 }
 
-function _geo_specific_config_for_cn() {
-    local docker_cfg="/etc/docker/daemon.json"
-    if [ -e "${docker_cfg}" ] && \
-        jq '."registry-mirrors"[]' "${docker_cfg}" &>/dev/null ; then
-        echo "Existing registry mirrors in found ${docker_cfg} and will be used."
-        return
-    fi
-
-    if [ ! -e "${docker_cfg}" ]; then
-        echo "{\"experimental\":true, \"registry-mirrors\":[ \
-               \"http://hub-mirror.c.163.com\", \
-               \"https://reg-mirror.qiniu.com\", \
-               \"https://dockerhub.azk8s.cn\" \
-           ]}" | jq -s ".[]" | sudo tee -a "${docker_cfg}"
-    else
-        local tmpfile="$(mktemp /tmp/docker.daemon.XXXXXX)"
-        jq '.+={"registry-mirrors":["http://hub-mirror.c.163.com","https://reg-mirror.qiniu.com","https://dockerhub.azk8s.cn"]}' \
-            "${docker_cfg}" > "${tmpfile}"
-        sudo cp -f "${tmpfile}" "${docker_cfg}"
-    fi
-    service docker restart
-}
-
 function geo_specific_config() {
     local geo="$1"
-    if [ -z "${geo}" ] || [ "${geo}" = "none" ]; then
-        info "GeoLocation based settings: use default."
-    elif [ "${geo}" = "cn" ]; then
-        info "GeoLocation based settings: from within China"
-        _geo_specific_config_for_cn
+    if [[ -z "${geo}" ]]; then
+        info "Use default GeoLocation settings"
+    elif [[ "${geo}" == "cn" ]]; then
+        info "GeoLocation settings for Mainland China"
+        GEO_REGISTRY="registry.baidubce.com"
     else
-        info "GeoLocation based settings for ${geo}: not ready, fallback to default"
+        info "GeoLocation settings for ${geo} is not ready, fallback to default"
     fi
 }
 
 function parse_arguments() {
     local custom_version=""
+    local custom_dist=""
     local shm_size=""
-    local geo="none"
+    local geo=""
 
-    while [ $# -gt 0 ] ; do
-        local opt="$1"; shift
+    while [ $# -gt 0 ]; do
+        local opt="$1"
+        shift
         case "${opt}" in
-        -t|--tag)
-            if [ -n "${custom_version}" ]; then
-                warning "Multiple option ${opt} specified, only the last one will take effect."
-            fi
-            custom_version="$1"; shift
-            _optarg_check_for_opt "${opt}" "${custom_version}"
-            ;;
+            -t | --tag)
+                if [ -n "${custom_version}" ]; then
+                    warning "Multiple option ${opt} specified, only the last one will take effect."
+                fi
+                custom_version="$1"
+                shift
+                _optarg_check_for_opt "${opt}" "${custom_version}"
+                ;;
 
-        -h|--help)
-            show_usage
-            exit 1
-            ;;
+            -d | --dist)
+                custom_dist="$1"
+                shift
+                _optarg_check_for_opt "${opt}" "${custom_dist}"
+                ;;
 
-        -f|--fast)
-            FAST_MODE="yes"
-            ;;
+            -h | --help)
+                show_usage
+                exit 1
+                ;;
 
-        -g|--geo)
-            geo="$1"; shift
-            _optarg_check_for_opt "${opt}" "${geo}"
-            ;;
+            -f | --fast)
+                FAST_MODE="yes"
+                ;;
 
-        -l|--local)
-            USE_LOCAL_IMAGE="yes"
-            ;;
+            -g | --geo)
+                geo="$1"
+                shift
+                _optarg_check_for_opt "${opt}" "${geo}"
+                ;;
 
-        --shm-size)
-            shm_size="$1"; shift
-            _optarg_check_for_opt "${opt}" "${shm_size}"
-            ;;
+            -l | --local)
+                USE_LOCAL_IMAGE=1
+                ;;
 
-        --map)
-            map_name="$1"; shift
-            USER_SPECIFIED_MAPS="${USER_SPECIFIED_MAPS} ${map_name}"
-            ;;
-        -y)
-            USER_AGREED="yes"
-            ;;
-        stop)
-            stop_all_apollo_containers_for_user "-f"
-            exit 0
-            ;;
-        *)
-            warning "Unknown option: ${opt}"
-            exit 2
-            ;;
+            --shm-size)
+                shm_size="$1"
+                shift
+                _optarg_check_for_opt "${opt}" "${shm_size}"
+                ;;
+
+            --map)
+                map_name="$1"
+                shift
+                USER_SPECIFIED_MAPS="${USER_SPECIFIED_MAPS} ${map_name}"
+                ;;
+            -y)
+                USER_AGREED="yes"
+                ;;
+            stop)
+                stop_all_apollo_containers_for_user "-f"
+                exit 0
+                ;;
+            *)
+                warning "Unknown option: ${opt}"
+                exit 2
+                ;;
         esac
     done # End while loop
 
-    [ -n "${geo}" ] && GEOLOC="${geo}"
-    [ -n "${custom_version}" ] && USER_VERSION_OPT="${custom_version}"
-    [ -n "${shm_size}" ] && SHM_SIZE="${shm_size}"
+    [[ -n "${geo}" ]] && GEOLOC="${geo}"
+    [[ -n "${custom_version}" ]] && USER_VERSION_OPT="${custom_version}"
+    [[ -n "${custom_dist}" ]] && CUSTOM_DIST="${custom_dist}"
+    [[ -n "${shm_size}" ]] && SHM_SIZE="${shm_size}"
 }
 
 function determine_dev_image() {
     local version="$1"
     # If no custom version specified
-    if [ -z "${version}" ]; then
-        if [ "${TARGET_ARCH}" = "x86_64" ]; then
-            version="${VERSION_X86_64}"
-        elif [ "${TARGET_ARCH}" = "aarch64" ]; then
+    if [[ -z "${version}" ]]; then
+        if [[ "${TARGET_ARCH}" == "x86_64" ]]; then
+            if [[ "${CUSTOM_DIST}" == "testing" ]]; then
+                version="${TESTING_VERSION_X86_64}"
+            else
+                version="${VERSION_X86_64}"
+            fi
+        elif [[ "${TARGET_ARCH}" == "aarch64" ]]; then
             version="${VERSION_AARCH64}"
         else
             error "Logic can't reach here! Please report this issue to Apollo@GitHub."
@@ -261,19 +263,21 @@ function determine_dev_image() {
 }
 
 function check_host_environment() {
-    local kernel="$(uname -s)"
-    if [ "${kernel}" != "Linux" ]; then
-        warning "Running Apollo dev container on ${kernel} is UNTESTED, exiting..."
+    if [[ "${HOST_OS}" != "Linux" ]]; then
+        warning "Running Apollo dev container on ${HOST_OS} is UNTESTED, exiting..."
         exit 1
     fi
 }
 
 function check_target_arch() {
     local arch="${TARGET_ARCH}"
-    if [[ "${SUPPORTED_ARCHS}" != *" ${arch} "* ]]; then
-        error "Unsupported target architecture: ${arch}. Allowed values:${SUPPORTED_ARCHS}"
-        exit 1
-    fi
+    for ent in "${SUPPORTED_ARCHS[@]}"; do
+        if [[ "${ent}" == "${TARGET_ARCH}" ]]; then
+            return 0
+        fi
+    done
+    error "Unsupported target architecture: ${TARGET_ARCH}."
+    exit 1
 }
 
 function setup_devices_and_mount_local_volumes() {
@@ -281,7 +285,7 @@ function setup_devices_and_mount_local_volumes() {
 
     [ -d "${CACHE_ROOT_DIR}" ] || mkdir -p "${CACHE_ROOT_DIR}"
 
-    source "${APOLLO_ROOT_DIR}/scripts/apollo_base.sh" CYBER_ONLY
+    source "${APOLLO_ROOT_DIR}/scripts/apollo_base.sh"
     setup_device
 
     local volumes="-v $APOLLO_ROOT_DIR:/apollo"
@@ -292,20 +296,25 @@ function setup_devices_and_mount_local_volumes() {
 
     local os_release="$(lsb_release -rs)"
     case "${os_release}" in
-        14.04)
-            warning "[Deprecated] Support for Ubuntu 14.04 will be removed" \
-                    "in the near future. Please upgrade to ubuntu 18.04+."
+        16.04)
+            warning "[Deprecated] Support for Ubuntu 16.04 will be removed" \
+                "in the near future. Please upgrade to ubuntu 18.04+."
+            volumes="${volumes} -v /dev:/dev"
             ;;
-        16.04|18.04|20.04|*)
+        18.04 | 20.04 | *)
             volumes="${volumes} -v /dev:/dev"
             ;;
     esac
+    # local tegra_dir="/usr/lib/aarch64-linux-gnu/tegra"
+    # if [[ "${TARGET_ARCH}" == "aarch64" && -d "${tegra_dir}" ]]; then
+    #    volumes="${volumes} -v ${tegra_dir}:${tegra_dir}:ro"
+    # fi
     volumes="${volumes} -v /media:/media \
                         -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
                         -v /etc/localtime:/etc/localtime:ro \
                         -v /usr/src:/usr/src \
                         -v /lib/modules:/lib/modules"
-    volumes="$(tr -s " " <<< "${volumes}")"
+    volumes="$(tr -s " " <<<"${volumes}")"
     eval "${__retval}='${volumes}'"
 }
 
@@ -317,9 +326,9 @@ function determine_gpu_use_host() {
     else
         # Check nvidia-driver and GPU device
         local nv_driver="nvidia-smi"
-        if [ ! -x "$(command -v ${nv_driver} )" ]; then
+        if [ ! -x "$(command -v ${nv_driver})" ]; then
             warning "No nvidia-driver found. CPU will be used"
-        elif [ -z "$(eval ${nv_driver} )" ]; then
+        elif [ -z "$(eval ${nv_driver})" ]; then
             warning "No GPU device found. CPU will be used."
         else
             USE_GPU_HOST=1
@@ -330,22 +339,19 @@ function determine_gpu_use_host() {
     local nv_docker_doc="https://github.com/NVIDIA/nvidia-docker/blob/master/README.md"
     if [ ${USE_GPU_HOST} -eq 1 ]; then
         DOCKER_VERSION=$(docker version --format '{{.Server.Version}}')
-        if [ ! -z "$(which nvidia-docker)" ]; then
-            DOCKER_RUN="nvidia-docker run"
-            warning "nvidia-docker is deprecated. Please install latest docker " \
-                    "and nvidia-container-toolkit as described by:"
-            warning "  ${nv_docker_doc}"
-        elif [ ! -z "$(which nvidia-container-toolkit)" ]; then
+        if [[ -x "$(which nvidia-container-toolkit)" ]]; then
             if dpkg --compare-versions "${DOCKER_VERSION}" "ge" "19.03"; then
                 DOCKER_RUN="docker run --gpus all"
             else
-                warning "You must upgrade to docker-ce 19.03+ to access GPU from container!"
+                warning "You must upgrade to Docker-CE 19.03+ to access GPU from container!"
                 USE_GPU_HOST=0
             fi
+        elif [[ -x "$(which nvidia-docker)" ]]; then
+            DOCKER_RUN="nvidia-docker run"
         else
             USE_GPU_HOST=0
             warning "Cannot access GPU from within container. Please install " \
-                    "latest docker and nvidia-container-toolkit as described by: "
+                "latest Docker and NVIDIA Container Toolkit as described by: "
             warning "  ${nv_docker_doc}"
         fi
     fi
@@ -360,16 +366,19 @@ function remove_existing_dev_container() {
 
 function docker_pull() {
     local img="$1"
-    if [ "${USE_LOCAL_IMAGE}" = "yes" ];then
-        if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${img}" ; then
+    if [[ "${USE_LOCAL_IMAGE}" -gt 0 ]]; then
+        if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "${img}"; then
             info "Local image ${img} found and will be used."
             return
         fi
         warning "Image ${img} not found locally although local mode enabled. Trying to pull from remote registry."
     fi
+    if [[ -n "${GEO_REGISTRY}" ]]; then
+        img="${GEO_REGISTRY}/${img}"
+    fi
 
     info "Start pulling docker image ${img} ..."
-    if ! docker pull "${img}" ; then
+    if ! docker pull "${img}"; then
         error "Failed to pull docker image : ${img}"
         exit 1
     fi
@@ -412,7 +421,7 @@ function mount_map_volumes() {
         done
     fi
 
-    if [ "$FAST_MODE" = "no" ]; then
+    if [[ "$FAST_MODE" == "no" ]]; then
         for map_name in ${DEFAULT_MAPS[@]}; do
             restart_map_volume_if_needed "${map_name}" "${VOLUME_VERSION}"
         done
@@ -426,32 +435,24 @@ function mount_map_volumes() {
 function mount_other_volumes() {
     info "Mount other volumes ..."
     local volume_conf=
-    if [ "${FAST_MODE}" = "no" ]; then
-        # YOLO3D
-        local yolo3d_volume="apollo_yolo3d_volume_${USER}"
-        local yolo3d_image="${DOCKER_REPO}:yolo3d_volume-${TARGET_ARCH}-latest"
-        docker_restart_volume "${yolo3d_volume}" "${yolo3d_image}"
-        volume_conf="${volume_conf} --volumes-from ${yolo3d_volume}"
-    fi
-
-    # LOCALIZATION
-    local localization_volume="apollo_localization_volume_${USER}"
-    local localization_image="${DOCKER_REPO}:localization_volume-${TARGET_ARCH}-latest"
-    docker_restart_volume "${localization_volume}" "${localization_image}"
-    volume_conf="${volume_conf} --volumes-from ${localization_volume}"
 
     # AUDIO
     local audio_volume="apollo_audio_volume_${USER}"
-    local audio_image="${DOCKER_REPO}:data_volume-audio_model-latest"
+    local audio_image="${DOCKER_REPO}:data_volume-audio_model-${TARGET_ARCH}-latest"
     docker_restart_volume "${audio_volume}" "${audio_image}"
     volume_conf="${volume_conf} --volumes-from ${audio_volume}"
 
-    if [ "${TARGET_ARCH}" = "x86_64" ]; then
-        local local_3rdparty_volume="apollo_local_third_party_volume_${USER}"
-        local local_3rdparty_image="${DOCKER_REPO}:local_third_party_volume-${TARGET_ARCH}-latest"
-        docker_restart_volume "${local_3rdparty_volume}" "${local_3rdparty_image}"
-        volume_conf="${volume_conf} --volumes-from ${local_3rdparty_volume}"
-    fi
+    # YOLOV4
+    local yolov4_volume="apollo_yolov4_volume_${USER}"
+    local yolov4_image="${DOCKER_REPO}:yolov4_volume-emergency_detection_model-${TARGET_ARCH}-latest"
+    docker_restart_volume "${yolov4_volume}" "${yolov4_image}"
+    volume_conf="${volume_conf} --volumes-from ${yolov4_volume}"
+
+    # FASTER_RCNN
+    local faster_rcnn_volume="apollo_faster_rcnn_volume_${USER}"
+    local faster_rcnn_image="${DOCKER_REPO}:faster_rcnn_volume-traffic_light_detection_model-${TARGET_ARCH}-latest"
+    docker_restart_volume "${faster_rcnn_volume}" "${faster_rcnn_image}"
+    volume_conf="${volume_conf} --volumes-from ${faster_rcnn_volume}"
 
     OTHER_VOLUMES_CONF="${volume_conf}"
 }
@@ -472,11 +473,11 @@ function main() {
     determine_dev_image "${USER_VERSION_OPT}"
     geo_specific_config "${GEOLOC}"
 
-    if [ "${USE_LOCAL_IMAGE}" = "yes" ];then
+    if [[ "${USE_LOCAL_IMAGE}" -gt 0 ]]; then
         info "Start docker container based on local image : ${APOLLO_DEV_IMAGE}"
     fi
 
-    if ! docker_pull "${APOLLO_DEV_IMAGE}" ; then
+    if ! docker_pull "${APOLLO_DEV_IMAGE}"; then
         error "Failed to pull docker image ${APOLLO_DEV_IMAGE}"
         exit 1
     fi
@@ -505,34 +506,35 @@ function main() {
 
     set -x
 
-    ${DOCKER_RUN} -itd  \
-        --privileged    \
-        --name "${APOLLO_DEV}"      \
-        -e DISPLAY="${display}"     \
-        -e DOCKER_USER="${user}"    \
-        -e USER="${user}"           \
-        -e DOCKER_USER_ID="${uid}"  \
-        -e DOCKER_GRP="${group}"    \
-        -e DOCKER_GRP_ID="${gid}"   \
+    ${DOCKER_RUN} -itd \
+        --privileged \
+        --name "${APOLLO_DEV}" \
+        -e DISPLAY="${display}" \
+        -e DOCKER_USER="${user}" \
+        -e USER="${user}" \
+        -e DOCKER_USER_ID="${uid}" \
+        -e DOCKER_GRP="${group}" \
+        -e DOCKER_GRP_ID="${gid}" \
         -e DOCKER_IMG="${APOLLO_DEV_IMAGE}" \
-        -e USE_GPU_HOST="${USE_GPU_HOST}"   \
+        -e HOST_OS="${HOST_OS}" \
+        -e USE_GPU_HOST="${USE_GPU_HOST}" \
         -e NVIDIA_VISIBLE_DEVICES=all \
         -e NVIDIA_DRIVER_CAPABILITIES=compute,video,graphics,utility \
-        ${MAP_VOLUMES_CONF}      \
-        ${OTHER_VOLUMES_CONF}    \
-        ${local_volumes}        \
+        ${MAP_VOLUMES_CONF} \
+        ${OTHER_VOLUMES_CONF} \
+        ${local_volumes} \
         --net host \
         -w /apollo \
         --add-host "${DEV_INSIDE}:127.0.0.1" \
         --add-host "${local_host}:127.0.0.1" \
         --hostname "${DEV_INSIDE}" \
-        --shm-size "${SHM_SIZE}"   \
-        --pid=host      \
+        --shm-size "${SHM_SIZE}" \
+        --pid=host \
         -v /dev/null:/dev/raw1394 \
         "${APOLLO_DEV_IMAGE}" \
         /bin/bash
 
-    if [ $? -ne 0 ];then
+    if [ $? -ne 0 ]; then
         error "Failed to start docker container \"${APOLLO_DEV}\" based on image: ${APOLLO_DEV_IMAGE}"
         exit 1
     fi

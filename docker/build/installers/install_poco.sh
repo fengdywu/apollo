@@ -80,3 +80,7 @@ ldconfig
 
 # clean up
 rm -rf poco-${VERSION}-release.tar.gz poco-poco-${VERSION}-release
+
+if [[ -n "${CLEAN_DEPS}" ]]; then
+    apt_get_remove libssl-dev
+fi

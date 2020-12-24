@@ -107,7 +107,7 @@ LaneInfo::LaneInfo(const Lane &lane) : lane_(lane) { Init(); }
 
 void LaneInfo::Init() {
   PointsFromCurve(lane_.central_curve(), &points_);
-  CHECK_GE(points_.size(), 2);
+  CHECK_GE(points_.size(), 2U);
   segments_.clear();
   accumulated_s_.clear();
   unit_directions_.clear();
@@ -212,7 +212,7 @@ double LaneInfo::Heading(const double s) const {
 }
 
 double LaneInfo::Curvature(const double s) const {
-  if (points_.size() < 2) {
+  if (points_.size() < 2U) {
     AERROR << "Not enough points to compute curvature.";
     return 0.0;
   }
@@ -550,7 +550,7 @@ void SignalInfo::Init() {
     points.emplace_back(segment.start());
     points.emplace_back(segment.end());
   }
-  CHECK_GT(points.size(), 0);
+  CHECK_GT(points.size(), 0U);
 }
 
 CrosswalkInfo::CrosswalkInfo(const Crosswalk &crosswalk)
@@ -687,6 +687,8 @@ void PNCJunctionInfo::Init() {
     overlap_ids_.emplace_back(overlap_id);
   }
 }
+
+RSUInfo::RSUInfo(const RSU &rsu) : _rsu(rsu) {}
 
 }  // namespace hdmap
 }  // namespace apollo

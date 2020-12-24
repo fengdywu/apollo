@@ -2,11 +2,13 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 load("//tools:cpplint.bzl", "cpplint")
 
 package(default_visibility = ["//visibility:public"])
+
 CANBUS_COPTS = ["-DMODULE_NAME=\\\"canbus\\\""]
 
 cc_library(
     name = "canbus_devkit_protocol",
     deps = [
+        ":bms_report_512",
         ":brake_command_101",
         ":brake_report_501",
         ":gear_command_103",
@@ -24,6 +26,28 @@ cc_library(
         ":ultr_sensor_5_511",
         ":vcu_report_505",
         ":wheelspeed_report_506",
+    ],
+)
+
+cc_library(
+    name = "bms_report_512",
+    srcs = ["bms_report_512.cc"],
+    hdrs = ["bms_report_512.h"],
+    copts = CANBUS_COPTS,
+    deps = [
+        "//modules/canbus/proto:chassis_detail_cc_proto",
+        "//modules/drivers/canbus/can_comm:message_manager_base",
+        "//modules/drivers/canbus/common:canbus_common",
+    ],
+)
+
+cc_test(
+    name = "bms_report_512_test",
+    size = "small",
+    srcs = ["bms_report_512_test.cc"],
+    deps = [
+        "//modules/canbus/vehicle/devkit/protocol:canbus_devkit_protocol",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

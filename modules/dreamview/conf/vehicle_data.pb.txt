@@ -24,7 +24,7 @@ data_files {
 }
 data_files {
   source_path: "velodyne_params"
-  dest_path: "/apollo/modules/drivers/velodyne/params"
+  dest_path: "/apollo/modules/drivers/lidar/velodyne/params"
 }
 data_files {
   source_path: "velodyne_params"
@@ -63,12 +63,16 @@ data_files {
   dest_path: "/apollo/modules/drivers/radar/conti_radar/conf"
 }
 data_files {
+  source_path: "radar_dag"
+  dest_path: "/apollo/modules/drivers/radar/conti_radar/dag"
+}
+data_files {
   source_path: "gnss_conf"
   dest_path: "/apollo/modules/drivers/gnss/conf"
 }
 data_files {
   source_path: "velodyne_conf"
-  dest_path: "/apollo/modules/drivers/velodyne/conf"
+  dest_path: "/apollo/modules/drivers/lidar/velodyne/conf"
 }
 data_files {
   source_path: "camera_conf"
@@ -137,4 +141,32 @@ data_files {
 data_files {
   source_path: "perception_launch"
   dest_path: "/apollo/modules/perception/production/launch"
+}
+data_files {
+  source_path: "perception_conf"
+  dest_path: "/apollo/modules/perception/production/conf/perception"
+}
+data_files {
+  source_path: "lidar_dag"
+  dest_path: "/apollo/modules/drivers/lidar/dag"
+}
+data_files {
+  source_path: "lidar_conf"
+  dest_path: "/apollo/modules/drivers/lidar/conf"
+}
+data_files {
+  source_path: "lidar_params"
+  dest_path: "/apollo/modules/drivers/lidar/velodyne/params"
+}
+data_files {
+  source_path: "lidar_params"
+  dest_path: "/apollo/modules/localization/msf/params/velodyne_params"
+}
+data_files {
+  source_path: "lidar_params"
+  dest_path: "/apollo/modules/perception/data/params"
+}
+data_files {
+  source_path: "perception_conf/pointcloud_preprocessor.conf"
+  dest_path: "/apollo/modules/perception/production/data/perception/lidar/models/pointcloud_preprocessor/velodyne128/pointcloud_preprocessor.conf"
 }

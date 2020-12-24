@@ -12,6 +12,7 @@ cc_library(
     deps = [
         "//cyber",
         "//modules/audio/proto:audio_event_cc_proto",
+        "//modules/audio/proto:audio_cc_proto",
         "//modules/canbus/proto:chassis_cc_proto",
         "//modules/common/adapters:adapter_gflags",
         "//modules/common/configs:vehicle_config_helper",
@@ -33,6 +34,7 @@ cc_library(
         "//modules/planning/proto:planning_cc_proto",
         "//modules/prediction/proto:prediction_obstacle_cc_proto",
         "//modules/storytelling/proto:story_cc_proto",
+        "//modules/task_manager/proto:task_manager_cc_proto",
         "@com_github_nlohmann_json//:json",
         "@com_google_absl//absl/strings",
     ],
@@ -66,7 +68,9 @@ cc_library(
         "//modules/dreamview/backend/map:map_service",
         "//modules/dreamview/backend/perception_camera_updater",
         "//modules/dreamview/backend/sim_control",
+        "//modules/routing/proto:default_routing_cc_proto",
         "//modules/routing/proto:poi_cc_proto",
+        "//modules/task_manager/proto:task_manager_cc_proto",
         "@boost",
     ],
 )

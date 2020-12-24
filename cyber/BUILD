@@ -11,25 +11,9 @@ cc_library(
     ],
 )
 
-cc_binary(
-    name = "mainboard",
-    srcs = [
-        "mainboard/mainboard.cc",
-        "mainboard/module_argument.cc",
-        "mainboard/module_argument.h",
-        "mainboard/module_controller.cc",
-        "mainboard/module_controller.h",
-    ],
-    linkopts = ["-pthread"],
-    linkstatic = False,
-    deps = [
-        ":cyber_core",
-        "//cyber/proto:dag_conf_cc_proto",
-    ],
-)
-
 cc_library(
     name = "binary",
+    srcs = ["binary.cc"],
     hdrs = ["binary.h"],
 )
 
@@ -47,6 +31,7 @@ cc_library(
     srcs = ["init.cc"],
     hdrs = ["init.h"],
     deps = [
+        "//cyber:binary",
         "//cyber:state",
         "//cyber/common:file",
         "//cyber/logger:async_logger",
@@ -102,12 +87,11 @@ cc_library(
         "//cyber/time:rate",
         "//cyber/timer",
         "//cyber/transport",
-        "//cyber/transport:participant",
-        "//cyber/transport:sub_listener",
-        "@com_google_glog//:glog",
+        "//cyber/transport/rtps:participant",
+        "//cyber/transport/rtps:sub_listener",
+        "@com_github_google_glog//:glog",
         "@com_google_protobuf//:protobuf",
         "@fastrtps",
-        "@uuid",
     ],
 )
 

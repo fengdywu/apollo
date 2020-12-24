@@ -63,34 +63,34 @@ function setup_device_for_aarch64() {
 
 function setup_device_for_amd64() {
   # setup CAN device
-  for INDEX in $(seq 0 3); do
-    # soft link if sensorbox exist
-    if [ -e /dev/zynq_can${INDEX} ] && [ ! -e /dev/can${INDEX} ]; then
-      sudo ln -s /dev/zynq_can${INDEX} /dev/can${INDEX}
-    fi
-    if [ ! -e /dev/can${INDEX} ]; then
-      sudo mknod --mode=a+rw /dev/can${INDEX} c 52 $INDEX
+  local NUM_PORTS=8
+  for i in $(seq 0 $((${NUM_PORTS} - 1))); do
+    if [[ -e /dev/can${i} ]]; then
+      continue
+    elif [[ -e /dev/zynq_can${i} ]]; then
+      # soft link if sensorbox exist
+      sudo ln -s /dev/zynq_can${i} /dev/can${i}
+    else
+      break
+      # sudo mknod --mode=a+rw /dev/can${i} c 52 ${i}
     fi
   done
 
-  # setup nvidia device
-  sudo /sbin/modprobe nvidia
-  sudo /sbin/modprobe nvidia-uvm
-  if [ ! -e /dev/nvidia0 ]; then
-    info "mknod /dev/nvidia0"
-    sudo mknod -m 666 /dev/nvidia0 c 195 0
+  # Check Nvidia device
+  if [[ ! -e /dev/nvidia0 ]]; then
+    warning "No device named /dev/nvidia0"
   fi
-  if [ ! -e /dev/nvidiactl ]; then
-    info "mknod /dev/nvidiactl"
-    sudo mknod -m 666 /dev/nvidiactl c 195 255
+  if [[ ! -e /dev/nvidiactl ]]; then
+    warning "No device named /dev/nvidiactl"
   fi
-  if [ ! -e /dev/nvidia-uvm ]; then
-    info "mknod /dev/nvidia-uvm"
-    sudo mknod -m 666 /dev/nvidia-uvm c 243 0
+  if [[ ! -e /dev/nvidia-uvm ]]; then
+    warning "No device named /dev/nvidia-uvm"
   fi
-  if [ ! -e /dev/nvidia-uvm-tools ]; then
-    info "mknod /dev/nvidia-uvm-tools"
-    sudo mknod -m 666 /dev/nvidia-uvm-tools c 243 1
+  if [[ ! -e /dev/nvidia-uvm-tools ]]; then
+    warning "No device named /dev/nvidia-uvm-tools"
+  fi
+  if [[ ! -e /dev/nvidia-modeset ]]; then
+    warning "No device named /dev/nvidia-modeset"
   fi
 }
 
